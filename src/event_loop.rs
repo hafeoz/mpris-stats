@@ -1,14 +1,19 @@
 mod update_listener;
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{bail, Context as _, Result};
 use futures_lite::StreamExt as _;
-use std::{collections::{HashMap, HashSet}, fs::File, sync::Arc, time::{Duration, SystemTime, UNIX_EPOCH}};
+use std::{
+    collections::{HashMap, HashSet},
+    fs::File,
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use tokio::{select, sync::mpsc, time};
 use update_listener::get_player_info;
-use zbus::{Connection, names::OwnedBusName};
+use zbus::{names::OwnedBusName, Connection};
 
 use crate::{
-    dbus::{BusActivity, BusChange, player_buses},
+    dbus::{player_buses, BusActivity, BusChange},
     output,
     player::{PlaybackStatus, PlayerInformation},
 };
@@ -17,7 +22,7 @@ pub async fn event_loop(
     conn: Connection,
     write_interval: Duration,
     mut activity_file: File,
-    filter_keys: HashSet<String>
+    filter_keys: HashSet<String>,
 ) -> Result<()> {
     let mut dbus_stream = player_buses(&conn).await?;
 
@@ -29,9 +34,10 @@ pub async fn event_loop(
     let mut write = |available_players: &mut HashMap<
         Arc<OwnedBusName>,
         (PlayerInformation, tokio::task::JoinHandle<Result<()>>),
-    >|
+    >,
+                     skip_bool: bool|
      -> Result<()> {
-        let players = available_players
+        let players: HashMap<_, _> = available_players
             .iter()
             .filter(|(_, (i, _))| i.status == PlaybackStatus::Playing)
             .map(|(i, (j, _))| {
@@ -43,6 +49,9 @@ pub async fn event_loop(
                 )
             })
             .collect();
+        if skip_bool && players.is_empty() {
+            return Ok(());
+        }
         let state = output::MPRISActivity {
             players,
             timestamp: SystemTime::now()
@@ -80,7 +89,7 @@ pub async fn event_loop(
                         updater.abort();
                     }
                 };
-                write(&mut available_players)?;
+                write(&mut available_players, false)?;
                 write_interval.reset();
             }
             Some((bus_name, player_update)) = player_update_receiver.recv() => {
@@ -88,11 +97,11 @@ pub async fn event_loop(
                 let Some((info, _)) = available_players.get_mut(&bus_name) else { bail!("Attempting to update a non-existent player {bus_name}") };
                 info.apply_update(player_update);
 
-                write(&mut available_players)?;
+                write(&mut available_players, false)?;
                 write_interval.reset();
             }
             _ = write_interval.tick() => {
-                write(&mut available_players)?;
+                write(&mut available_players, true)?;
             }
             else => { bail!("Player stream closed"); }
         }
