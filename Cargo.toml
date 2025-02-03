@@ -1,0 +1,33 @@
+[package]
+name = "mpris-stats"
+version = "1.0.0"
+edition = "2024"
+authors = ["hafeoz <me@zony.dev>"]
+description = "A tiny daemon to log playing music using MPRIS protocol"
+readme = "README.md"
+repository = "https://github.com/hafeoz/mpris-stats"
+license = "0BSD OR CC0-1.0 OR WTFPL"
+
+[dependencies]
+clap = { version = "4.5.27", features = ["derive"] } # Command line parsing
+zbus = { version = "5.3.1", default-features = false, features = ["tokio"] } # D-Bus MPRIS connectivity
+time = { version = "0.3.37", features = ["local-offset", "formatting"] } # Time stuff
+dirs = "6.0.0" # Get correct file dir to write to
+
+# Async stuff
+futures-lite = "2.6.0"
+futures = "0.3.31"
+tokio = { version = "1.43.0", features = ["rt", "macros"] }
+
+# Error handling
+anyhow = "1.0.95"
+tracing = { version = "0.1.41", features = ["max_level_trace", "release_max_level_warn"] }
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+
+# Serialization
+serde = "1.0.217"
+serde_json = "1.0.138"
+
+[profile.release]
+codegen-units = 1
+lto = true
